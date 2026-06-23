@@ -34,10 +34,8 @@ pronto_para_rodar = False
 # --- CONTROLE DE SESSÃO PARA MANTER OS DADOS NA MEMÓRIA ---
 if arquivo_up is not None:
     try:
-        # Se o arquivo acabou de ser carregado e não está na sessão, salva ele lá
         if 'df_insumos_local' not in st.session_state:
             df_carregado = pd.read_excel(arquivo_up)
-            # Garante que as colunas obrigatórias existem
             if all(col in df_carregado.columns for col in colunas_matriz):
                 st.session_state['df_insumos_local'] = df_carregado
             else:
@@ -57,7 +55,7 @@ if arquivo_up is not None:
 if pronto_para_rodar:
     
     aba_mapa, aba_movimentar, aba_enderecar, aba_ia = st.tabs([
-        "📌 Estrutura de Ruas", 
+        "🛣️ Estrutura de Ruas", 
         "🔄 Entradas e Saídas", 
         "📍 Inserir/Mudar Endereço", 
         "🤖 Analista IA"
@@ -73,7 +71,6 @@ if pronto_para_rodar:
         df_filtrado = df_insumos if rua_selecionada == "Todas" else df_insumos[df_insumos["Rua_Endereco"] == rua_selecionada]
         st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
         
-        # Gráfico
         st.subheader("📊 Volume de Insumos por Rua")
         grafico_data = df_insumos.groupby("Rua_Endereco")["Quantidade"].sum()
         st.bar_chart(grafico_data)
@@ -103,7 +100,6 @@ if pronto_para_rodar:
             if tipo_op == "SAÍDA" and qtd < quantidade_op:
                 st.error("Operação negada! Saldo em estoque insuficiente.")
             else:
-                # Atualiza na memória do navegador
                 if tipo_op == "ENTRADA":
                     st.session_state['df_insumos_local'].loc[idx, "Quantidade"] = qtd + quantidade_op
                 else:
@@ -134,7 +130,6 @@ if pronto_para_rodar:
         rua_atual_end = df_insumos.loc[idx_end, "Rua_Endereco"]
         st.info(f"O item **{item_selecionado_end}** está atualmente localizado na: `{rua_atual_end}`")
         
-        # Inputs para o operador digitar o novo endereço estruturado
         col_end1, col_end2 = st.columns(2)
         with col_end1:
             rua_nova = st.text_input("Rua (Ex: Rua A, Rua B):", value=str(rua_atual_end))
@@ -142,10 +137,8 @@ if pronto_para_rodar:
             operador_end = st.text_input("Nome do Operador:", value="Almoxarife", key="end_op")
             
         if st.button("Gravar Novo Endereço via Sistema"):
-            # Atualiza o endereço na sessão do app
             st.session_state['df_insumos_local'].loc[idx_end, "Rua_Endereco"] = rua_nova
             
-            # Cria registro de alteração de endereço no histórico
             novo_reg_end = {
                 "Data_Hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "Código": df_insumos.loc[idx_end, "Código"],
@@ -160,12 +153,10 @@ if pronto_para_rodar:
             st.success(f"📍 Sucesso! Novo endereço de '{item_selecionado_end}' definido para '{rua_nova}'.")
             st.rerun()
 
-    # --- SEÇÃO DE SALVAMENTO DE VOLTA PARA A MÁQUINA LOCAL ---
+    # --- SEÇÃO DE SALVAMENTO PARA DOWNLOAD ---
     st.write("---")
     st.subheader("💾 Salvar Alterações na Máquina Local")
-    st.write("Clique no botão abaixo para baixar a planilha atualizada com todas as movimentações e novos endereços salvos nesta sessão.")
     
-    # Prepara o arquivo Excel na memória para download
     buffer_download = io.BytesIO()
     with pd.ExcelWriter(buffer_download, engine='openpyxl') as writer:
         st.session_state['df_insumos_local'].to_excel(writer, index=False)
@@ -177,25 +168,35 @@ if pronto_para_rodar:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # --- ABA 4: INTELIGÊNCIA ARTIFICIAL ---
+    # --- ABA 4: INTELIGÊNCIA ARTIFICIAL (ENVIO COM ENTER E APENAS TEXTO) ---
     with aba_ia:
-        st.subheader("🤖 Analista IA Inteligente")
-        pergunta = st.text_input("Faça perguntas sobre as ruas, saldos ou histórico de movimentação:")
+        st.subheader("🤖 Analista IA / Perguntas por texto")
         
-        if st.button("Consultar Gemini") and pergunta:
-            with st.spinner("Analisando seus dados locais..."):
+        # Formulário que captura a tecla ENTER nativamente
+        with st.form(key="formulario_ia", clear_on_submit=False):
+            pergunta = st.text_input("Faça perguntas sobre as ruas, saldos ou histórico de movimentação:")
+            botao_enviar = st.form_submit_button(label="Consultar Gemini")
+        
+        if botao_enviar and pergunta:
+            with st.spinner("Analisando os seus dados locais..."):
                 try:
                     prompt = f"""
-                    Você gerencia o controle de insumos logísticos de um armazém.
-                    As colunas são: Código, Descrição, Métrica, Quantidade, Rua_Endereco.
+                    Você é o assistente virtual exclusivo do nosso armazém logístico.
+                    A sua função é responder a perguntas de forma clara, natural e profissional sobre o inventário e a localização nas estruturas porta-paletes.
 
-                    ESTOQUE ATUAL CARREGADO NA SESSÃO LOCAL:
+                    REGRAS ABSOLUTAS DE RESPOSTA:
+                    1. Responda APENAS em texto legível e corrido para o utilizador.
+                    2. NUNCA exiba código Python, blocos markdown de programação, variáveis, scripts ou sintaxes de dados.
+                    3. NUNCA mencione caminhos de ficheiros, variáveis internas como 'df_insumos_local', 'st.session_state' ou termos de programação.
+                    4. Seja direto e focado no negócio logístico.
+
+                    DADOS DE ESTOQUE ATUAL:
                     {df_insumos.to_string(index=False)}
 
-                    HISTÓRICO DE ENTRADAS/SAÍDAS/ENDEREÇAMENTOS DA SESSÃO:
+                    HISTÓRICO RECENTE:
                     {df_movimentos.to_string(index=False)}
 
-                    Responda à seguinte pergunta do operador: {pergunta}
+                    Dúvida do operador: {pergunta}
                     """
                     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                     st.info("🤖 Retorno do Analista IA:")

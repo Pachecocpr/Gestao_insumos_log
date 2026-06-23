@@ -46,10 +46,15 @@ if arquivo_up is not None:
             # Aba de Insumos (Obrigatória)
             if "Insumos" in excel_file.sheet_names:
                 df_carregado = pd.read_excel(arquivo_up, sheet_name="Insumos")
+                
+                # BLINDAGEM: Corrige automaticamente se na planilha estiver escrito com "ç"
+                if "Rua_Endereço" in df_carregado.columns:
+                    df_carregado = df_carregado.rename(columns={"Rua_Endereço": "Rua_Endereco"})
+                
                 if all(col in df_carregado.columns for col in colunas_matriz):
                     st.session_state['df_insumos_local'] = df_carregado
                 else:
-                    st.error(f"A aba 'Insumos' precisa conter exatamente as colunas: {colunas_matriz}")
+                    st.error(f"A aba 'Insumos' precisa conter exatamente as colunas: {colunas_matriz}. Colunas encontradas: {list(df_carregado.columns)}")
                     st.stop()
             else:
                 st.error("O arquivo precisa conter uma aba chamada 'Insumos'.")
@@ -57,7 +62,10 @@ if arquivo_up is not None:
                 
             # Aba de Histórico (Opcional)
             if "Historico" in excel_file.sheet_names:
-                st.session_state['df_movimentos_local'] = pd.read_excel(arquivo_up, sheet_name="Historico")
+                df_hist_carregado = pd.read_excel(arquivo_up, sheet_name="Historico")
+                if "Rua_Endereço" in df_hist_carregado.columns:
+                    df_hist_carregado = df_hist_carregado.rename(columns={"Rua_Endereço": "Rua_Endereco"})
+                st.session_state['df_movimentos_local'] = df_hist_carregado
             else:
                 st.session_state['df_movimentos_local'] = pd.DataFrame(columns=colunas_mov)
                 
@@ -186,11 +194,11 @@ if pronto_para_rodar:
             if tipo_op == "SAÍDA" and qtd < quantidade_op:
                 st.error("Operação negada! Saldo em estoque insuficiente.")
             else:
-                # --- CORREÇÃO AQUI: Trocado .loc por .at ---
+                # Modificação direta na cópia explícita gerenciada pelo Streamlit
                 if tipo_op == "ENTRADA":
-                    st.session_state['df_insumos_local'].at[idx, "Quantidade"] = qtd + quantidade_op
+                    st.session_state['df_insumos_local'].loc[idx, "Quantidade"] = int(qtd + quantidade_op)
                 else:
-                    st.session_state['df_insumos_local'].at[idx, "Quantidade"] = qtd - quantidade_op
+                    st.session_state['df_insumos_local'].loc[idx, "Quantidade"] = int(qtd - quantidade_op)
                 
                 novo_reg = {
                     "Data_Hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -218,8 +226,9 @@ if pronto_para_rodar:
         rua_nova = st.text_input("Nova Rua/Posição:", value=str(rua_atual_end))
             
         if st.button("Gravar Novo Endereço via Sistema"):
-            # --- CORREÇÃO CRÍTICA AQUI: Trocado .loc por .at para evitar o TypeError ---
-            st.session_state['df_insumos_local'].at[idx_end, "Rua_Endereco"] = rua_nova
+            # Salvamento seguro convertendo a coluna de forma explícita para evitar conflito interno de tipos do pandas
+            st.session_state['df_insumos_local'] = st.session_state['df_insumos_local'].astype({"Rua_Endereco": "object"})
+            st.session_state['df_insumos_local'].loc[idx_end, "Rua_Endereco"] = str(rua_nova)
             
             novo_reg_end = {
                 "Data_Hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -228,7 +237,7 @@ if pronto_para_rodar:
                 "Tipo": "ALTERAÇÃO ENDEREÇO",
                 "Quantidade": df_insumos.loc[idx_end, "Quantidade"],
                 "Métrica": df_insumos.loc[idx_end, "Métrica"],
-                "Rua_Endereco": rua_nova,
+                "Rua_Endereco": str(rua_nova),
                 "Operador": operador_atual
             }
             st.session_state['df_movimentos_local'] = pd.concat([st.session_state['df_movimentos_local'], pd.DataFrame([novo_reg_end])], ignore_index=True)

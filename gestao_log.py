@@ -57,7 +57,7 @@ if arquivo_up is not None:
 if pronto_para_rodar:
     
     aba_mapa, aba_movimentar, aba_enderecar, aba_ia = st.tabs([
-        "静态 Estrutura de Ruas", 
+        "📌 Estrutura de Ruas", 
         "🔄 Entradas e Saídas", 
         "📍 Inserir/Mudar Endereço", 
         "🤖 Analista IA"

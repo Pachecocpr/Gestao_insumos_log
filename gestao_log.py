@@ -41,7 +41,6 @@ pronto_para_rodar = False
 if arquivo_up is not None:
     try:
         if 'df_insumos_local' not in st.session_state:
-            # Tenta ler as abas existentes no Excel de forma independente
             excel_file = pd.ExcelFile(arquivo_up)
             
             # Aba de Insumos (Obrigatória)
@@ -56,13 +55,13 @@ if arquivo_up is not None:
                 st.error("O arquivo precisa conter uma aba chamada 'Insumos'.")
                 st.stop()
                 
-            # Aba de Histórico (Opcional - cria se não existir)
+            # Aba de Histórico (Opcional)
             if "Historico" in excel_file.sheet_names:
                 st.session_state['df_movimentos_local'] = pd.read_excel(arquivo_up, sheet_name="Historico")
             else:
                 st.session_state['df_movimentos_local'] = pd.DataFrame(columns=colunas_mov)
                 
-            # Aba de Usuários (Opcional - cria se não existir)
+            # Aba de Usuários (Opcional)
             if "Usuarios" in excel_file.sheet_names:
                 st.session_state['df_usuarios_local'] = pd.read_excel(arquivo_up, sheet_name="Usuarios")
             else:
@@ -80,7 +79,6 @@ if pronto_para_rodar:
     if 'usuario_logado' not in st.session_state:
         st.session_state['usuario_logado'] = None
 
-    # Se o usuário não está logado, exibe tela de login/cadastro
         st.subheader("🔒 Controle de Acesso Necessário")
         aba_login, aba_cadastro = st.tabs(["🔑 Realizar Login", "📝 Cadastrar Usuário"])
         
@@ -92,7 +90,6 @@ if pronto_para_rodar:
                 
                 if botao_login:
                     senha_hash = codificar_senha(pass_login)
-                    # Verifica se o usuário e senha batem com a planilha
                     usuario_valido = df_usuarios[(df_usuarios["Usuario"] == user_login) & (df_usuarios["Senha"] == senha_hash)]
                     
                     if not usuario_valido.empty:
@@ -120,9 +117,8 @@ if pronto_para_rodar:
                         st.session_state['df_usuarios_local'] = pd.concat([st.session_state['df_usuarios_local'], novo_user_df], ignore_index=True)
                         st.success(f"Usuário '{user_novo}' cadastrado com sucesso! Faça login na aba ao lado.")
                         st.rerun()
-        st.stop()  # Bloqueia o app caso não esteja logado
+        st.stop()
 
-    # --- SE USUÁRIO ESTIVER LOGADO, LIBERA O SISTEMA ---
     operador_atual = st.session_state['usuario_logado']
     st.sidebar.success(f"👤 Operador: {operador_atual}")
     if st.sidebar.button("🚪 Sair (Logoff)"):
@@ -150,7 +146,7 @@ if pronto_para_rodar:
         grafico_data = df_insumos.groupby("Rua_Endereco")["Quantidade"].sum()
         st.bar_chart(grafico_data)
 
-    # --- ABA 2: MOVIMENTAÇÃO (CARDS E HISTÓRICO AUTOMÁTICO) ---
+    # --- ABA 2: MOVIMENTAÇÃO ---
     with aba_movimentar:
         st.subheader("📊 Painel de Rotatividade e Fluxo de Estoque")
         df_saidas = df_movimentos[df_movimentos["Tipo"] == "SAÍDA"]
@@ -190,10 +186,11 @@ if pronto_para_rodar:
             if tipo_op == "SAÍDA" and qtd < quantidade_op:
                 st.error("Operação negada! Saldo em estoque insuficiente.")
             else:
+                # --- CORREÇÃO AQUI: Trocado .loc por .at ---
                 if tipo_op == "ENTRADA":
-                    st.session_state['df_insumos_local'].loc[idx, "Quantidade"] = qtd + quantidade_op
+                    st.session_state['df_insumos_local'].at[idx, "Quantidade"] = qtd + quantidade_op
                 else:
-                    st.session_state['df_insumos_local'].loc[idx, "Quantidade"] = qtd - quantidade_op
+                    st.session_state['df_insumos_local'].at[idx, "Quantidade"] = qtd - quantidade_op
                 
                 novo_reg = {
                     "Data_Hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -203,7 +200,7 @@ if pronto_para_rodar:
                     "Quantidade": quantidade_op,
                     "Métrica": met,
                     "Rua_Endereco": rua,
-                    "Operador": operador_atual  # Puxa o nome logado automaticamente
+                    "Operador": operador_atual
                 }
                 st.session_state['df_movimentos_local'] = pd.concat([st.session_state['df_movimentos_local'], pd.DataFrame([novo_reg])], ignore_index=True)
                 st.success("Movimentação registrada com sucesso!")
@@ -221,7 +218,8 @@ if pronto_para_rodar:
         rua_nova = st.text_input("Nova Rua/Posição:", value=str(rua_atual_end))
             
         if st.button("Gravar Novo Endereço via Sistema"):
-            st.session_state['df_insumos_local'].loc[idx_end, "Rua_Endereco"] = rua_nova
+            # --- CORREÇÃO CRÍTICA AQUI: Trocado .loc por .at para evitar o TypeError ---
+            st.session_state['df_insumos_local'].at[idx_end, "Rua_Endereco"] = rua_nova
             
             novo_reg_end = {
                 "Data_Hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -231,7 +229,7 @@ if pronto_para_rodar:
                 "Quantidade": df_insumos.loc[idx_end, "Quantidade"],
                 "Métrica": df_insumos.loc[idx_end, "Métrica"],
                 "Rua_Endereco": rua_nova,
-                "Operador": operador_atual  # Puxa o nome logado automaticamente
+                "Operador": operador_atual
             }
             st.session_state['df_movimentos_local'] = pd.concat([st.session_state['df_movimentos_local'], pd.DataFrame([novo_reg_end])], ignore_index=True)
             st.success(f"📍 Novo endereço gravado!")
@@ -242,7 +240,6 @@ if pronto_para_rodar:
     st.subheader("💾 Salvar Alterações na Máquina Local")
     
     buffer_download = io.BytesIO()
-    # Cria o arquivo unificado com 3 abas internas
     with pd.ExcelWriter(buffer_download, engine='openpyxl') as writer:
         st.session_state['df_insumos_local'].to_excel(writer, sheet_name="Insumos", index=False)
         st.session_state['df_movimentos_local'].to_excel(writer, sheet_name="Historico", index=False)

@@ -56,7 +56,7 @@ if pronto_para_rodar:
     
     aba_mapa, aba_movimentar, aba_enderecar, aba_ia = st.tabs([
         "🛣️ Estrutura de Ruas", 
-        "🔄 Entradas e Saídas", 
+        "🔄 Movimentação & Rotatividade", 
         "📍 Inserir/Mudar Endereço", 
         "🤖 Analista IA"
     ])
@@ -75,9 +75,45 @@ if pronto_para_rodar:
         grafico_data = df_insumos.groupby("Rua_Endereco")["Quantidade"].sum()
         st.bar_chart(grafico_data)
 
-    # --- ABA 2: MOVIMENTAÇÃO (ENTRADAS E SAÍDAS) ---
+    # --- ABA 2: MOVIMENTAÇÃO (AGORA COM CARDS E GRÁFICO DE ROTATIVIDADE) ---
     with aba_movimentar:
-        st.subheader("Registrar Movimentação de Estoque")
+        st.subheader("📊 Painel de Rotatividade e Fluxo de Estoque")
+        
+        # Filtrar apenas as saídas para calcular a rotatividade real (Giro de Estoque)
+        df_saidas = df_movimentos[df_movimentos["Tipo"] == "SAÍDA"]
+        
+        # Cálculo dos indicadores para os Cards
+        total_movimentado = len(df_movimentos)
+        total_pecas_saida = df_saidas["Quantidade"].sum() if not df_saidas.empty else 0
+        
+        if not df_saidas.empty:
+            # Encontra o item com maior quantidade acumulada de saídas
+            mais_rodado_serie = df_saidas.groupby("Descrição")["Quantidade"].sum()
+            item_mais_rodado = mais_rodado_serie.idxmax()
+            qtd_mais_rodado = mais_rodado_serie.max()
+        else:
+            item_mais_rodado = "Nenhum"
+            qtd_mais_rodado = 0
+            
+        # Exibição dos Cards Gerenciais
+        card1, card2, card3 = st.columns(3)
+        card1.metric(label="Total de Operações Realizadas", value=total_movimentado)
+        card2.metric(label="Total de Insumos Despachados (Saídas)", value=f"{total_pecas_saida} un/cx")
+        card3.metric(label="Insumo de Maior Rotatividade", value=str(item_mais_rodado), delta=f"{qtd_mais_rodado} saídas")
+        
+        st.write("---")
+        
+        # Gráfico de Rotatividade (Ranking de Saídas)
+        if not df_saidas.empty:
+            st.subheader("🔥 Ranking de Rotatividade (Insumos Mais Retirados)")
+            # Agrupa por item, soma as saídas e ordena do maior para o menor
+            dados_ranking = df_saidas.groupby("Descrição")["Quantidade"].sum().sort_values(ascending=False)
+            st.bar_chart(dados_ranking)
+        else:
+            st.info("💡 O gráfico de rotatividade aparecerá aqui assim que a primeira 'SAÍDA' for registrada nesta sessão.")
+            
+        st.write("---")
+        st.subheader("🔄 Registrar Nova Movimentação")
         
         item_selecionado = st.selectbox("Escolha o Insumo para Movimentar:", df_insumos["Descrição"].unique(), key="mov_item")
         idx = df_insumos[df_insumos["Descrição"] == item_selecionado].index[0]
@@ -172,7 +208,6 @@ if pronto_para_rodar:
     with aba_ia:
         st.subheader("🤖 Analista IA / Perguntas por texto")
         
-        # Formulário que captura a tecla ENTER nativamente
         with st.form(key="formulario_ia", clear_on_submit=False):
             pergunta = st.text_input("Faça perguntas sobre as ruas, saldos ou histórico de movimentação:")
             botao_enviar = st.form_submit_button(label="Consultar Gemini")
